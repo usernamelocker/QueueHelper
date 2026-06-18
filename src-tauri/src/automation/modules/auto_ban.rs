@@ -18,6 +18,7 @@ pub async fn run_auto_ban(context: Arc<AppContext>, shutdown: tokio_util::sync::
     let mut pending_lock: HashMap<i64, (i64, Instant)> = HashMap::new();
     let mut failed_attempts: HashMap<i64, HashSet<i64>> = HashMap::new();
     let mut pending_pick_position_request: Option<u32> = None;
+    let mut pending_role_swap: Option<(String, bool)> = None;
     let mut sweep_timer = tokio::time::interval(Duration::from_secs(1));
 
     loop {
@@ -54,6 +55,7 @@ pub async fn run_auto_ban(context: Arc<AppContext>, shutdown: tokio_util::sync::
                             pending_lock.clear();
                             failed_attempts.clear();
                             pending_pick_position_request = None;
+                            pending_role_swap = None;
                             continue;
                         }
 
@@ -77,6 +79,10 @@ pub async fn run_auto_ban(context: Arc<AppContext>, shutdown: tokio_util::sync::
                             context.monitor(MonitorLevel::Info, "auto-ban", format!("Banned champion #{}", champion_id));
                             if let Some(desired_pos) = pending_pick_position_request.take() {
                                 request_pick_position(&context, desired_pos, &session).await;
+                            }
+                            if let Some((ref preferred_role, _)) = pending_role_swap {
+                                request_role_swap_if_autofilled(&context, preferred_role, &session).await;
+                                pending_role_swap = None;
                             }
                         }
 
@@ -195,6 +201,9 @@ pub async fn run_auto_ban(context: Arc<AppContext>, shutdown: tokio_util::sync::
                                 if profile.request_pick_position > 0 {
                                     pending_pick_position_request = Some(profile.request_pick_position);
                                 }
+                                if profile.request_role_swap_when_autofilled {
+                                    pending_role_swap = Some((profile.preferred_role.clone(), true));
+                                }
                             }
                             Err(e) => {
                                 pending_hover.remove(&action.id);
@@ -280,6 +289,60 @@ async fn perform_hover(context: &Arc<AppContext>, action_id: i64, champion_id: i
         .await?;
 
     Ok(())
+}
+
+async fn request_role_swap_if_autofilled(context: &Arc<AppContext>, preferred_role: &str, session: &crate::lcu::types::ChampSelectSession) {
+    if preferred_role.is_empty() { return; }
+
+    let local_player = session.my_team.iter().find(|p| p.cell_id == session.local_player_cell_id);
+    let Some(local_player) = local_player else { return };
+    if local_player.assigned_position.is_empty() { return; }
+    if local_player.assigned_position == preferred_role { return; }
+
+    let target_cell_id = session.my_team.iter()
+        .find(|p| p.cell_id != session.local_player_cell_id && p.assigned_position == preferred_role)
+        .map(|p| p.cell_id);
+
+    let Some(target_cell_id) = target_cell_id else {
+        context.monitor(
+            MonitorLevel::Info,
+            "auto-ban",
+            format!(
+                "Autofilled as {} (prefer {}), but no teammate has that role",
+                local_player.assigned_position, preferred_role
+            ),
+        );
+        return;
+    };
+
+    let client = context.lcu_client.read().await.clone();
+    let Some(client) = client else { return };
+
+    match client
+        .post_json(
+            &format!("/lol-champ-select/v1/session/position-swaps/{}", target_cell_id),
+            None,
+        )
+        .await
+    {
+        Ok(_) => {
+            context.monitor(
+                MonitorLevel::Info,
+                "auto-ban",
+                format!(
+                    "Autofilled as {} → requested role swap with cell {} who has {}",
+                    local_player.assigned_position, target_cell_id, preferred_role
+                ),
+            );
+        }
+        Err(e) => {
+            context.monitor(
+                MonitorLevel::Warn,
+                "auto-ban",
+                format!("Role swap request failed: {}", e),
+            );
+        }
+    }
 }
 
 async fn perform_ban(context: &Arc<AppContext>, action_id: i64, champion_id: i64) -> Result<()> {

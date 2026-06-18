@@ -64,6 +64,8 @@ pub struct ChampSelectParticipant {
     pub champion_id: i64,
     #[serde(default)]
     pub assigned_position: String,
+    #[serde(default)]
+    pub summoner_id: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
