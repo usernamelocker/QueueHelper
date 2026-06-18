@@ -1,0 +1,24 @@
+node_modules
+dist
+dist-ssr
+*.local
+
+# Rust build artifacts
+src-tauri/target/
+
+# Built installer
+QueueHelper_Setup.exe
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
