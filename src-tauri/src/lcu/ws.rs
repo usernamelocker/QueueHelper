@@ -154,9 +154,9 @@ fn handle_ws_text(bus: &EventBus, raw_text: &str) {
 
     if topic.contains("lol-matchmaking_v1_ready-check") {
         let state = data
-            .get("playerResponse")
+            .get("state")
             .and_then(serde_json::Value::as_str)
-            .or_else(|| data.get("state").and_then(serde_json::Value::as_str))
+            .or_else(|| data.get("playerResponse").and_then(serde_json::Value::as_str))
             .or_else(|| data.as_str())
             .unwrap_or("Unknown")
             .to_string();
