@@ -1,6 +1,6 @@
 [package]
 name = "queue-helper"
-version = "0.1.0"
+version = "0.1.1"
 description = "Queue Helper - lightweight League champion select automation companion"
 authors = ["ADMIN"]
 edition = "2021"

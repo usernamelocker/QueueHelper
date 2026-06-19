@@ -1,7 +1,7 @@
 {
   "name": "queue-helper",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Queue Helper - lightweight League champion select automation companion",
   "type": "module",
   "scripts": {
