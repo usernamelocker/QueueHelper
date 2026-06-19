@@ -12,6 +12,7 @@ use crate::{
 
 pub async fn run_auto_accept(context: std::sync::Arc<AppContext>, shutdown: tokio_util::sync::CancellationToken) {
     let mut receiver = context.bus.subscribe();
+    let mut has_accepted = false;
 
     loop {
         tokio::select! {
@@ -23,6 +24,15 @@ pub async fn run_auto_accept(context: std::sync::Arc<AppContext>, shutdown: toki
 
                 match event {
                     AppEvent::ReadyCheckUpdated { state, queue_id } => {
+                        if state != "Found" && state != "InProgress" {
+                            has_accepted = false;
+                            continue;
+                        }
+
+                        if has_accepted {
+                            continue;
+                        }
+
                         let accept_enabled = {
                             let state = context.state.read().await;
                             let global_enabled = state.settings.automation.auto_accept.enabled;
@@ -36,44 +46,44 @@ pub async fn run_auto_accept(context: std::sync::Arc<AppContext>, shutdown: toki
                             continue;
                         }
 
-                        if state == "Found" || state == "InProgress" {
-                            let delay = {
-                                let state = context.state.read().await;
-                                let settings = &state.settings.automation.auto_accept;
-                                let mut rng = rand::rng();
-                                let min_ms = (settings.delay_min_seconds * 1000.0) as u64;
-                                let max_ms = (settings.delay_max_seconds * 1000.0) as u64;
-                                let delay_ms = rng.random_range(min_ms..=max_ms.max(min_ms + 100));
-                                Duration::from_millis(delay_ms)
-                            };
+                        has_accepted = true;
 
-                            context.monitor(
-                                MonitorLevel::Info,
-                                "auto-accept",
-                                format!("Match found – accepting in {:.2}s", delay.as_secs_f32()),
-                            );
+                        let delay = {
+                            let state = context.state.read().await;
+                            let settings = &state.settings.automation.auto_accept;
+                            let mut rng = rand::rng();
+                            let min_ms = (settings.delay_min_seconds * 1000.0) as u64;
+                            let max_ms = (settings.delay_max_seconds * 1000.0) as u64;
+                            let delay_ms = rng.random_range(min_ms..=max_ms.max(min_ms + 100));
+                            Duration::from_millis(delay_ms)
+                        };
 
-                            sleep(delay).await;
+                        context.monitor(
+                            MonitorLevel::Info,
+                            "auto-accept",
+                            format!("Match found – accepting in {:.2}s", delay.as_secs_f32()),
+                        );
 
-                            if shutdown.is_cancelled() {
-                                break;
+                        sleep(delay).await;
+
+                        if shutdown.is_cancelled() {
+                            break;
+                        }
+
+                        match accept_queue(context.clone()).await {
+                            Ok(_) => {
+                                context.monitor(
+                                    MonitorLevel::Info,
+                                    "auto-accept",
+                                    "Queue accepted".to_string(),
+                                );
                             }
-
-                            match accept_queue(context.clone()).await {
-                                Ok(_) => {
-                                    context.monitor(
-                                        MonitorLevel::Info,
-                                        "auto-accept",
-                                        "Queue accepted".to_string(),
-                                    );
-                                }
-                                Err(error) => {
-                                    context.monitor(
-                                        MonitorLevel::Error,
-                                        "auto-accept",
-                                        format!("Failed to accept queue: {}", error),
-                                    );
-                                }
+                            Err(error) => {
+                                context.monitor(
+                                    MonitorLevel::Error,
+                                    "auto-accept",
+                                    format!("Failed to accept queue: {}", error),
+                                );
                             }
                         }
                     }
