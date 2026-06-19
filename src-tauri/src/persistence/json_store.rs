@@ -1,6 +1,6 @@
 use std::{
     marker::PhantomData,
-    path::{Path, PathBuf},
+    path::PathBuf,
 };
 
 use anyhow::{Context, Result};
@@ -21,10 +21,6 @@ where
             path,
             _marker: PhantomData,
         }
-    }
-
-    pub fn path(&self) -> &Path {
-        &self.path
     }
 
     pub async fn load_or_default_with_expected_version(&self, expected_version: u32) -> Result<T> {
@@ -55,22 +51,7 @@ where
         }
 
         let parsed = serde_json::from_str::<T>(&raw)
-            .with_context(|| format!("failed parsing JSON store {}", self.path.display()))?;
-        Ok(parsed)
-    }
-
-    pub async fn load_or_default(&self) -> Result<T> {
-        if tokio::fs::metadata(&self.path).await.is_err() {
-            let default_value = T::default();
-            self.save(&default_value).await?;
-            return Ok(default_value);
-        }
-
-        let raw = tokio::fs::read_to_string(&self.path)
-            .await
-            .with_context(|| format!("failed reading JSON store {}", self.path.display()))?;
-        let parsed = serde_json::from_str::<T>(&raw)
-            .with_context(|| format!("failed parsing JSON store {}", self.path.display()))?;
+            .with_context(|| format!("failed parsing JSON store {}", self.path.display())        )?;
         Ok(parsed)
     }
 
