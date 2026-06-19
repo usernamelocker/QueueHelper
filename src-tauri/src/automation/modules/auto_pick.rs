@@ -134,7 +134,8 @@ async fn try_process_session(
 
     let is_enabled = {
         let state = context.state.read().await;
-        state.settings.automation.auto_pick_enabled
+        if state.settings.automation.paused { false }
+        else { state.settings.automation.auto_pick_enabled }
     };
     if !is_enabled { return Ok(()) }
 

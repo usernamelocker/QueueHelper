@@ -63,7 +63,7 @@ pub async fn run_lockfile_monitor(
                 Ok(raw) => match parse_lockfile(&raw, &lockfile_path) {
                     Ok(lockfile) => {
                         let signature =
-                            format!("{}:{}:{}", lockfile_path.display(), lockfile.port, lockfile.pid);
+                            format!("{}:{}:{}:{}", lockfile_path.display(), lockfile.port, lockfile.pid, lockfile.password);
                         if previous_signature.as_ref() != Some(&signature) {
                             previous_signature = Some(signature);
                             bus.publish(AppEvent::LockfileDetected(lockfile));

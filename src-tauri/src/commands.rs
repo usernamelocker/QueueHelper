@@ -11,36 +11,39 @@ pub async fn get_runtime_snapshot(context: State<'_, Arc<AppContext>>) -> Result
 
 #[tauri::command]
 pub async fn get_settings(context: State<'_, Arc<AppContext>>) -> Result<AppSettings, String> {
-    context.settings_store.load_or_default().map_err(|e| e.to_string())
+    let state = context.state.read().await;
+    Ok(state.settings.clone())
 }
 
 #[tauri::command]
 pub async fn update_settings(context: State<'_, Arc<AppContext>>, settings: AppSettings) -> Result<(), String> {
-    context.settings_store.save(&settings).map_err(|e| e.to_string())?;
+    context.settings_store.save(&settings).await.map_err(|e| e.to_string())?;
     context.bus.publish(AppEvent::SettingsUpdated(settings));
     Ok(())
 }
 
 #[tauri::command]
 pub async fn get_profiles(context: State<'_, Arc<AppContext>>) -> Result<ProfilesStore, String> {
-    context.profiles_store.load_or_default().map_err(|e| e.to_string())
+    let state = context.state.read().await;
+    Ok(state.profiles.clone())
 }
 
 #[tauri::command]
 pub async fn update_profiles(context: State<'_, Arc<AppContext>>, profiles: ProfilesStore) -> Result<(), String> {
-    context.profiles_store.save(&profiles).map_err(|e| e.to_string())?;
+    context.profiles_store.save(&profiles).await.map_err(|e| e.to_string())?;
     context.bus.publish(AppEvent::ProfilesUpdated(profiles));
     Ok(())
 }
 
 #[tauri::command]
 pub async fn get_rules(context: State<'_, Arc<AppContext>>) -> Result<RulesStore, String> {
-    context.rules_store.load_or_default().map_err(|e| e.to_string())
+    let state = context.state.read().await;
+    Ok(state.rules.clone())
 }
 
 #[tauri::command]
 pub async fn update_rules(context: State<'_, Arc<AppContext>>, rules: RulesStore) -> Result<(), String> {
-    context.rules_store.save(&rules).map_err(|e| e.to_string())?;
+    context.rules_store.save(&rules).await.map_err(|e| e.to_string())?;
     context.bus.publish(AppEvent::RulesUpdated(rules));
     Ok(())
 }
@@ -58,7 +61,7 @@ pub async fn set_automation_paused(context: State<'_, Arc<AppContext>>, paused: 
         state.settings.automation.paused = paused;
         (state.snapshot(), state.settings.clone())
     };
-    context.settings_store.save(&settings).map_err(|e| e.to_string())?;
+    context.settings_store.save(&settings).await.map_err(|e| e.to_string())?;
     Ok(snapshot)
 }
 
@@ -69,7 +72,7 @@ pub async fn set_auto_accept_enabled(context: State<'_, Arc<AppContext>>, enable
         state.settings.automation.auto_accept.enabled = enabled;
         (state.snapshot(), state.settings.clone())
     };
-    context.settings_store.save(&settings).map_err(|e| e.to_string())?;
+    context.settings_store.save(&settings).await.map_err(|e| e.to_string())?;
     Ok(snapshot)
 }
 
@@ -80,7 +83,7 @@ pub async fn set_auto_ban_enabled(context: State<'_, Arc<AppContext>>, enabled: 
         state.settings.automation.auto_ban_enabled = enabled;
         (state.snapshot(), state.settings.clone())
     };
-    context.settings_store.save(&settings).map_err(|e| e.to_string())?;
+    context.settings_store.save(&settings).await.map_err(|e| e.to_string())?;
     Ok(snapshot)
 }
 
@@ -91,7 +94,7 @@ pub async fn set_auto_pick_enabled(context: State<'_, Arc<AppContext>>, enabled:
         state.settings.automation.auto_pick_enabled = enabled;
         (state.snapshot(), state.settings.clone())
     };
-    context.settings_store.save(&settings).map_err(|e| e.to_string())?;
+    context.settings_store.save(&settings).await.map_err(|e| e.to_string())?;
     Ok(snapshot)
 }
 
@@ -102,7 +105,7 @@ pub async fn set_auto_hover_enabled(context: State<'_, Arc<AppContext>>, enabled
         state.settings.automation.auto_hover_enabled = enabled;
         (state.snapshot(), state.settings.clone())
     };
-    context.settings_store.save(&settings).map_err(|e| e.to_string())?;
+    context.settings_store.save(&settings).await.map_err(|e| e.to_string())?;
     Ok(snapshot)
 }
 
@@ -113,6 +116,6 @@ pub async fn set_active_profile(context: State<'_, Arc<AppContext>>, profile_id:
         state.profiles.active_profile_id = Some(profile_id.clone());
         state.profiles.clone()
     };
-    context.profiles_store.save(&profiles).map_err(|e| e.to_string())?;
+    context.profiles_store.save(&profiles).await.map_err(|e| e.to_string())?;
     Ok(profile_id)
 }

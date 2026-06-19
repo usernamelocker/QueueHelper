@@ -23,6 +23,12 @@ pub async fn run_rules_engine(context: Arc<AppContext>, shutdown: CancellationTo
 
                 match event {
                     AppEvent::ChampSelectSessionUpdated { session } => {
+                        let paused = {
+                            let state = context.state.read().await;
+                            state.settings.automation.paused
+                        };
+                        if paused { continue }
+
                         let rules = {
                             let state = context.state.read().await;
                             state.rules.rules.clone()
@@ -184,7 +190,7 @@ async fn persist_active_profile(context: &Arc<AppContext>) {
         let state = context.state.read().await;
         state.profiles.clone()
     };
-    let _ = context.profiles_store.save(&profiles);
+    let _ = context.profiles_store.save(&profiles).await;
 }
 
 async fn execute_action(context: &Arc<AppContext>, action: &RuleAction, champion_id: i64) {

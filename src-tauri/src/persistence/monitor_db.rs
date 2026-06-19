@@ -58,16 +58,23 @@ impl MonitorDb {
             .connection
             .lock()
             .map_err(|_| anyhow::anyhow!("monitor DB mutex poisoned"))?;
+
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM monitor_entries", [], |row| row.get(0))
+            .unwrap_or(0);
+        if count >= Self::MAX_ENTRIES {
+            conn.execute(
+                "DELETE FROM monitor_entries WHERE id <= (SELECT id FROM monitor_entries ORDER BY id DESC LIMIT 1 OFFSET ?1)",
+                params![Self::MAX_ENTRIES],
+            )
+            .ok();
+        }
+
         conn.execute(
             "INSERT INTO monitor_entries(timestamp, level, category, message) VALUES(?1, ?2, ?3, ?4)",
             params![timestamp, level.as_str(), category, message],
         )
         .context("failed inserting monitor entry")?;
-        conn.execute(
-            "DELETE FROM monitor_entries WHERE id <= (SELECT id FROM monitor_entries ORDER BY id DESC LIMIT 1 OFFSET ?1)",
-            params![Self::MAX_ENTRIES],
-        )
-        .ok();
         Ok(())
     }
 

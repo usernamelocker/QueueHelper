@@ -46,6 +46,11 @@ pub async fn run_auto_accept(context: std::sync::Arc<AppContext>, shutdown: toki
                             continue;
                         }
 
+                        if {
+                            let state = context.state.read().await;
+                            state.settings.automation.paused
+                        } { continue }
+
                         has_accepted = true;
 
                         let delay = {

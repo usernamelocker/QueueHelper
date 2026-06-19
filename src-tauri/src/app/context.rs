@@ -25,12 +25,12 @@ impl AppContext {
         let rules_store = JsonStore::new(data_dir.join("rules.json"));
         let monitor_db = MonitorDb::new(data_dir.join("monitor.db"))?;
 
-        let bus = EventBus::new(16);
+        let bus = EventBus::new(256);
 
         let runtime_state = RuntimeState::new(
-            settings_store.load_or_default()?,
-            profiles_store.load_or_default()?,
-            rules_store.load_or_default().unwrap_or_default(),
+            settings_store.load_or_default_with_expected_version(crate::models::SETTINGS_SCHEMA_VERSION).await?,
+            profiles_store.load_or_default_with_expected_version(crate::models::PROFILES_SCHEMA_VERSION).await?,
+            rules_store.load_or_default_with_expected_version(crate::models::RULES_SCHEMA_VERSION).await.unwrap_or_default(),
         );
 
         Ok(Self {

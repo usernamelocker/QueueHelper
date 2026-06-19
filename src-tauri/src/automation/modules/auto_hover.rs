@@ -23,7 +23,8 @@ pub async fn run_auto_hover(context: Arc<AppContext>, shutdown: CancellationToke
                     AppEvent::ChampSelectSessionUpdated { session } => {
                         let is_enabled = {
                             let state = context.state.read().await;
-                            state.settings.automation.auto_hover_enabled
+                            if state.settings.automation.paused { false }
+                            else { state.settings.automation.auto_hover_enabled }
                         };
                         if !is_enabled {
                             has_hovered = false;

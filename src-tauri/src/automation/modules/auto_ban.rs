@@ -107,7 +107,8 @@ pub async fn run_auto_ban(context: Arc<AppContext>, shutdown: tokio_util::sync::
 
                         let is_enabled = {
                             let state = context.state.read().await;
-                            state.settings.automation.auto_ban_enabled
+                            if state.settings.automation.paused { false }
+                            else { state.settings.automation.auto_ban_enabled }
                         };
                         if !is_enabled { continue }
 
