@@ -22,6 +22,7 @@ mod automation;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
         .invoke_handler(tauri::generate_handler![
             commands::get_runtime_snapshot,
             commands::get_settings,
@@ -37,6 +38,9 @@ pub fn run() {
             commands::set_auto_pick_enabled,
             commands::set_auto_hover_enabled,
             commands::set_active_profile,
+            commands::set_monitor_auto_scroll,
+            commands::set_monitor_scroll_top,
+            commands::get_monitor_scroll_top,
         ])
         .setup(|app| {
             use tauri::Manager;
@@ -47,36 +51,35 @@ pub fn run() {
                 .expect("failed to resolve app data dir");
             std::fs::create_dir_all(&data_dir).expect("failed to create app data dir");
 
+            let shutdown = tokio_util::sync::CancellationToken::new();
             let context = Arc::new(
-                tauri::async_runtime::block_on(crate::app::AppContext::new(data_dir))
+                tauri::async_runtime::block_on(crate::app::AppContext::new(data_dir, shutdown.clone(), Some(app.handle().clone())))
                     .expect("Failed to initialize app context"),
             );
 
             // ── Background Tasks ──
-            let shutdown = tokio_util::sync::CancellationToken::new();
             let ctx = context.clone();
-            let sd = shutdown.clone();
             tauri::async_runtime::spawn(async move {
                 tokio::join!(
-                    crate::core::state::run_state_reducer(ctx.clone(), sd.clone()),
+                    crate::core::state::run_state_reducer(ctx.clone(), ctx.shutdown.clone()),
                     crate::lcu::lockfile::run_lockfile_monitor(
                         ctx.bus.clone(),
                         ctx.state.clone(),
-                        sd.clone(),
+                        ctx.shutdown.clone(),
                     ),
-                    crate::lcu::manager::run_connection_manager(ctx.clone(), sd.clone()),
-                    crate::automation::run_auto_accept(ctx.clone(), sd.clone()),
-                    crate::automation::run_auto_ban(ctx.clone(), sd.clone()),
-                    crate::automation::run_auto_pick(ctx.clone(), sd.clone()),
-                    crate::automation::run_auto_hover(ctx.clone(), sd.clone()),
-                    crate::automation::run_rules_engine(ctx, sd),
+                    crate::lcu::manager::run_connection_manager(ctx.clone(), ctx.shutdown.clone()),
+                    crate::automation::run_auto_accept(ctx.clone(), ctx.shutdown.clone()),
+                    crate::automation::run_auto_ban(ctx.clone(), ctx.shutdown.clone()),
+                    crate::automation::run_auto_pick(ctx.clone(), ctx.shutdown.clone()),
+                    crate::automation::run_auto_hover(ctx.clone(), ctx.shutdown.clone()),
+                    crate::automation::run_rules_engine(ctx.clone(), ctx.shutdown.clone()),
                 );
             });
 
             app.manage(context);
 
             // ── System Tray ──
-            let show_hide = MenuItemBuilder::with_id("toggle", "Hide Queue Helper").build(app)?;
+            let show_hide = MenuItemBuilder::with_id("toggle", "Queue Helper").build(app)?;
             let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
             let menu = MenuBuilder::new(app)
                 .item(&show_hide)
@@ -94,8 +97,10 @@ pub fn run() {
                     "toggle" => {
                         if let Some(window) = app.get_webview_window("main") {
                             if window.is_visible().unwrap_or(false) {
+                                let _ = show_hide.set_text("Show Queue Helper");
                                 let _ = window.hide();
                             } else {
+                                let _ = show_hide.set_text("Hide Queue Helper");
                                 let _ = window.show();
                                 let _ = window.set_focus();
                             }

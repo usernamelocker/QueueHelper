@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
-import { getProfiles, updateProfiles } from "../api/tauri";
+import { useState } from "react";
+import { updateProfiles } from "../api/tauri";
+import { useApp } from "../hooks/AppContext";
 import { useTranslation } from "../i18n";
 import type { ProfilesStore, ChampionProfile, ChampionPriorityEntry } from "../types/models";
 import ChampionPicker from "../components/ChampionPicker";
@@ -20,13 +21,10 @@ function emptyProfile(): ChampionProfile {
 
 function Profiles() {
   const { t } = useTranslation();
-  const [store, setStore] = useState<ProfilesStore | null>(null);
+  const app = useApp();
+  const [store, setStore] = useState<ProfilesStore | null>(app.profiles);
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState<ChampionProfile | null>(null);
-
-  useEffect(() => {
-    getProfiles().then(setStore).catch(console.error);
-  }, []);
 
   const save = async (profile: ChampionProfile) => {
     if (!store) return;

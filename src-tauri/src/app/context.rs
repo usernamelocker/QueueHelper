@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tokio_util::sync::CancellationToken;
 
 use anyhow::Result;
 
@@ -15,11 +16,13 @@ pub struct AppContext {
     pub profiles_store: JsonStore<ProfilesStore>,
     pub rules_store: JsonStore<RulesStore>,
     pub monitor_db: MonitorDb,
+    pub shutdown: CancellationToken,
+    pub app_handle: Option<tauri::AppHandle>,
 }
 
 /* Context Singleton */
 impl AppContext {
-    pub async fn new(data_dir: PathBuf) -> Result<Self> {
+    pub async fn new(data_dir: PathBuf, shutdown: CancellationToken, app_handle: Option<tauri::AppHandle>) -> Result<Self> {
         let settings_store = JsonStore::new(data_dir.join("settings.json"));
         let profiles_store = JsonStore::new(data_dir.join("profiles.json"));
         let rules_store = JsonStore::new(data_dir.join("rules.json"));
@@ -41,6 +44,8 @@ impl AppContext {
             profiles_store,
             rules_store,
             monitor_db,
+            shutdown,
+            app_handle,
         })
     }
 

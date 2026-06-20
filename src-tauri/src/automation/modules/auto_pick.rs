@@ -5,10 +5,13 @@ use std::time::{Duration, Instant};
 use anyhow::Result;
 use rand::Rng;
 use serde_json::json;
+use tokio::sync::broadcast::error::RecvError;
 use tokio::time::sleep;
+use tokio_util::sync::CancellationToken;
 
 use crate::{
     app::AppContext,
+    automation::modules::shared::perform_hover,
     core::events::AppEvent,
     lcu::types::ChampSelectSession,
     models::MonitorLevel,
@@ -23,7 +26,11 @@ pub async fn run_auto_pick(context: Arc<AppContext>, shutdown: tokio_util::sync:
     let mut pending_lock: HashMap<i64, (i64, Instant)> = HashMap::new();
     let mut failed_attempts: HashMap<i64, HashSet<i64>> = HashMap::new();
     let mut last_session: Option<ChampSelectSession> = None;
-    let mut sweep_timer = tokio::time::interval(Duration::from_secs(1));
+    let mut last_cell_id: Option<i64> = None;
+    let mut sweep_timer = tokio::time::interval_at(
+        tokio::time::Instant::now() + Duration::from_secs(1),
+        Duration::from_secs(1),
+    );
 
     loop {
         tokio::select! {
@@ -44,7 +51,7 @@ pub async fn run_auto_pick(context: Arc<AppContext>, shutdown: tokio_util::sync:
                 if !timed_out.is_empty() {
                     if let Some(ref session) = last_session {
                         let _ = try_process_session(
-                            &context, session,
+                            &context, session, &shutdown,
                             &mut processed_action_ids,
                             &mut pending_hover,
                             &mut pending_lock,
@@ -54,18 +61,38 @@ pub async fn run_auto_pick(context: Arc<AppContext>, shutdown: tokio_util::sync:
                 }
             }
             event_result = receiver.recv() => {
-                let Ok(event) = event_result else { continue };
+                let event = match event_result {
+                    Ok(event) => event,
+                    Err(RecvError::Lagged(n)) => {
+                        context.monitor(MonitorLevel::Warn, "event-bus",
+                            format!("Dropped {} events (bus overflow)", n));
+                        continue;
+                    }
+                    Err(_) => break,
+                };
 
                 match event {
                     AppEvent::ChampSelectSessionUpdated { session } => {
                         let has_actions = session.actions.iter().any(|a| !a.is_empty());
                         if !has_actions {
-                            processed_action_ids.clear();
                             pending_hover.clear();
                             pending_lock.clear();
                             failed_attempts.clear();
                             last_session = None;
                             continue;
+                        }
+
+                        if let Some(prev) = last_cell_id {
+                            if session.local_player_cell_id != prev && session.local_player_cell_id != 0 {
+                                processed_action_ids.clear();
+                                pending_hover.clear();
+                                pending_lock.clear();
+                                failed_attempts.clear();
+                                last_session = None;
+                            }
+                        }
+                        if session.local_player_cell_id != 0 {
+                            last_cell_id = Some(session.local_player_cell_id);
                         }
 
                         if session.timer.phase != "BAN_PICK" { continue }
@@ -83,11 +110,10 @@ pub async fn run_auto_pick(context: Arc<AppContext>, shutdown: tokio_util::sync:
                                 }
                             }
                         }
-                        for (id, champion_id) in newly_completed {
+                        for (id, _) in newly_completed {
                             pending_lock.remove(&id);
                             failed_attempts.remove(&id);
                             processed_action_ids.insert(id);
-                            context.monitor(MonitorLevel::Info, "auto-pick", format!("Picked champion #{}", champion_id));
                         }
 
                         {
@@ -106,7 +132,7 @@ pub async fn run_auto_pick(context: Arc<AppContext>, shutdown: tokio_util::sync:
                         }
 
                         let _ = try_process_session(
-                            &context, &session,
+                            &context, &session, &shutdown,
                             &mut processed_action_ids,
                             &mut pending_hover,
                             &mut pending_lock,
@@ -123,6 +149,7 @@ pub async fn run_auto_pick(context: Arc<AppContext>, shutdown: tokio_util::sync:
 async fn try_process_session(
     context: &Arc<AppContext>,
     session: &ChampSelectSession,
+    shutdown: &CancellationToken,
     processed_action_ids: &mut HashSet<i64>,
     pending_hover: &mut HashSet<i64>,
     pending_lock: &mut HashMap<i64, (i64, Instant)>,
@@ -176,6 +203,7 @@ async fn try_process_session(
     let team_hovered: Vec<i64> = session
         .my_team
         .iter()
+        .filter(|p| p.cell_id != session.local_player_cell_id)
         .map(|p| p.champion_id)
         .filter(|cid| *cid != 0)
         .collect();
@@ -217,15 +245,28 @@ async fn try_process_session(
             let jitter = rng.random_range(0..=half);
             (delay_seconds * 1000.0) as u64 - half + jitter
         };
-        sleep(Duration::from_millis(delay_ms)).await;
+        tokio::select! {
+            _ = shutdown.cancelled() => { return Ok(()); }
+            _ = sleep(Duration::from_millis(delay_ms)) => {}
+        }
     } else {
-        sleep(Duration::from_millis(50)).await;
+        tokio::select! {
+            _ = shutdown.cancelled() => { return Ok(()); }
+            _ = sleep(Duration::from_millis(50)) => {}
+        }
+    }
+
+    if context.state.read().await.settings.automation.paused {
+        pending_hover.remove(&action.id);
+        return Ok(());
     }
 
     match perform_pick(context, action.id, champion_id).await {
         Ok(_) => {
             pending_hover.remove(&action.id);
             pending_lock.insert(action.id, (champion_id, Instant::now()));
+            processed_action_ids.insert(action.id);
+            context.monitor(MonitorLevel::Info, "auto-pick", format!("Picked champion #{}", champion_id));
         }
         Err(e) => {
             pending_hover.remove(&action.id);
@@ -236,22 +277,6 @@ async fn try_process_session(
             );
         }
     }
-
-    Ok(())
-}
-
-async fn perform_hover(context: &Arc<AppContext>, action_id: i64, champion_id: i64) -> Result<()> {
-    let client = context.lcu_client.read().await.clone();
-    let Some(client) = client else {
-        return Err(anyhow::anyhow!("LCU client not connected"));
-    };
-
-    client
-        .patch_json(
-            &format!("/lol-champ-select/v1/session/actions/{}", action_id),
-            json!({ "championId": champion_id }),
-        )
-        .await?;
 
     Ok(())
 }

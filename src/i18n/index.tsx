@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
-import { getSettings, updateSettings } from "../api/tauri";
+import { getSettings } from "../api/tauri";
 import { en } from "./en";
 import { tr } from "./tr";
 
@@ -18,13 +18,13 @@ function interpolate(template: string, args?: Record<string, string | number>): 
 interface TranslationContextValue {
   t: (key: TranslationKey, args?: Record<string, string | number>) => string;
   language: string;
-  setLanguage: (lang: string) => Promise<void>;
+  setLanguage: (lang: string) => void;
 }
 
 const TranslationContext = createContext<TranslationContextValue>({
   t: (key) => String(key),
   language: "en",
-  setLanguage: async () => {},
+  setLanguage: () => {},
 });
 
 export function TranslationProvider({ children }: { children: ReactNode }) {
@@ -38,12 +38,8 @@ export function TranslationProvider({ children }: { children: ReactNode }) {
       .catch(() => {});
   }, []);
 
-  const setLanguage = useCallback(async (lang: string) => {
+  const setLanguage = useCallback((lang: string) => {
     setLanguageState(lang);
-    try {
-      const settings = await getSettings();
-      await updateSettings({ ...settings, language: lang });
-    } catch { /* ignore */ }
   }, []);
 
   const t = useCallback(

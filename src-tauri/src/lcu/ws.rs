@@ -40,7 +40,7 @@ pub async fn run_ws_loop(bus: EventBus, lockfile: LockfileInfo, shutdown: Cancel
             retry_count = 0;
         }
 
-        let backoff_secs = (retry_count as u64).saturating_mul(2).min(60);
+        let backoff_secs = (retry_count as u64).saturating_mul(2).min(60).max(1);
         let delay = Duration::from_secs(backoff_secs);
 
         tokio::select! {

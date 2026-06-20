@@ -14,6 +14,8 @@ export interface RuntimeSnapshot {
   autoHoverEnabled: boolean;
   lastAction?: string | null;
   currentQueueId?: number | null;
+  monitorAutoScroll: boolean;
+  monitorScrollTop: number;
 }
 
 export interface AppSettings {

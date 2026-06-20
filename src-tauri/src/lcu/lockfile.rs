@@ -154,3 +154,65 @@ fn common_lockfile_candidates() -> Vec<PathBuf> {
     candidates
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn parse_valid_lockfile() {
+        let raw = "LeagueClient:12345:54321:abc123:https";
+        let info = parse_lockfile(raw, Path::new("/fake/lockfile")).unwrap();
+        assert_eq!(info.process_name, "LeagueClient");
+        assert_eq!(info.pid, 12345);
+        assert_eq!(info.port, 54321);
+        assert_eq!(info.password, "abc123");
+        assert_eq!(info.protocol, "https");
+        assert_eq!(info.lockfile_path, Path::new("/fake/lockfile"));
+    }
+
+    #[test]
+    fn parse_lockfile_too_few_fields() {
+        let raw = "LeagueClient:12345:54321";
+        assert!(parse_lockfile(raw, Path::new("/x")).is_err());
+    }
+
+    #[test]
+    fn parse_lockfile_too_many_fields() {
+        let raw = "LeagueClient:12345:54321:abc123:https:extra";
+        assert!(parse_lockfile(raw, Path::new("/x")).is_err());
+    }
+
+    #[test]
+    fn parse_lockfile_with_newline() {
+        let raw = "LeagueClient:1:2:pass:wss\n";
+        let info = parse_lockfile(raw, Path::new("/x")).unwrap();
+        assert_eq!(info.password, "pass");
+    }
+
+    #[test]
+    fn parse_lockfile_invalid_pid() {
+        let raw = "LeagueClient:abc:54321:abc123:https";
+        assert!(parse_lockfile(raw, Path::new("/x")).is_err());
+    }
+
+    #[test]
+    fn parse_lockfile_invalid_port() {
+        let raw = "LeagueClient:12345:xyz:abc123:https";
+        assert!(parse_lockfile(raw, Path::new("/x")).is_err());
+    }
+
+    #[test]
+    fn normalize_lockfile_path_already_has_lockfile() {
+        let path = PathBuf::from(r"C:\Riot Games\lockfile");
+        assert_eq!(normalize_lockfile_path(path.clone()), path);
+    }
+
+    #[test]
+    fn normalize_lockfile_path_appends_lockfile() {
+        let path = PathBuf::from(r"C:\Riot Games\League of Legends");
+        let expected = PathBuf::from(r"C:\Riot Games\League of Legends\lockfile");
+        assert_eq!(normalize_lockfile_path(path), expected);
+    }
+}
+

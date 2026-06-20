@@ -1,7 +1,10 @@
 use std::sync::Arc;
 use std::collections::HashSet;
 
+use tokio::sync::broadcast::error::RecvError;
 use tokio_util::sync::CancellationToken;
+use tauri::Emitter;
+use tauri_plugin_notification::NotificationExt;
 
 use crate::{
     app::AppContext,
@@ -13,13 +16,22 @@ use crate::{
 pub async fn run_rules_engine(context: Arc<AppContext>, shutdown: CancellationToken) {
     let mut receiver = context.bus.subscribe();
     let mut completed_action_ids: HashSet<i64> = HashSet::new();
+    let mut processed_cell_ids: HashSet<i64> = HashSet::new();
     let mut has_entered_champ_select = false;
 
     loop {
         tokio::select! {
             _ = shutdown.cancelled() => break,
             event_result = receiver.recv() => {
-                let Ok(event) = event_result else { continue };
+                let event = match event_result {
+                    Ok(event) => event,
+                    Err(RecvError::Lagged(n)) => {
+                        context.monitor(MonitorLevel::Warn, "event-bus",
+                            format!("Dropped {} events (bus overflow)", n));
+                        continue;
+                    }
+                    Err(_) => break,
+                };
 
                 match event {
                     AppEvent::ChampSelectSessionUpdated { session } => {
@@ -39,9 +51,40 @@ pub async fn run_rules_engine(context: Arc<AppContext>, shutdown: CancellationTo
                         if has_actions && !has_entered_champ_select {
                             has_entered_champ_select = true;
                             process_auto_switch(&context, &session, &rules).await;
+
+                            // Alert on pre-assigned champions (e.g. bots in custom games)
+                            for participant in session.my_team.iter().chain(session.their_team.iter()) {
+                                if participant.champion_id == 0 { continue; }
+                                if participant.cell_id == session.local_player_cell_id { continue; }
+                                if !processed_cell_ids.insert(participant.cell_id) { continue; }
+
+                                let has_pick_action = session.actions.iter().flatten().any(|a|
+                                    a.actor_cell_id == participant.cell_id && a.r#type == "pick"
+                                );
+                                if has_pick_action { continue; }
+
+                                let is_teammate = session.my_team.iter().any(|p| p.cell_id == participant.cell_id);
+                                let triggered: Vec<DraftRule> = rules.iter()
+                                    .filter(|r| r.enabled)
+                                    .filter(|r| {
+                                        let event_match = if is_teammate {
+                                            r.trigger.event == "teammatePickedChampion"
+                                        } else {
+                                            r.trigger.event == "enemyPickedChampion"
+                                        };
+                                        event_match && matches_champion_rule(&r.trigger.value, participant.champion_id, &session, participant.cell_id)
+                                    })
+                                    .cloned()
+                                    .collect();
+
+                                for rule in triggered {
+                                    execute_action(&context, &rule.action, participant.champion_id).await;
+                                }
+                            }
                         } else if !has_actions {
                             has_entered_champ_select = false;
                             completed_action_ids.clear();
+                            processed_cell_ids.clear();
                         }
 
                         if has_actions {
@@ -80,6 +123,7 @@ pub async fn run_rules_engine(context: Arc<AppContext>, shutdown: CancellationTo
                         if phase != "ChampSelect" && !phase.contains("Game") {
                             has_entered_champ_select = false;
                             completed_action_ids.clear();
+                            processed_cell_ids.clear();
                         }
                     }
                     _ => {}
@@ -201,6 +245,15 @@ async fn execute_action(context: &Arc<AppContext>, action: &RuleAction, champion
                 .and_then(|v| v.as_str())
                 .unwrap_or(&default_msg);
             context.monitor(MonitorLevel::Warn, "rules-engine", msg.to_string());
+
+            if let Some(ref app_handle) = context.app_handle {
+                let _ = app_handle.notification()
+                    .builder()
+                    .title("Queue Helper")
+                    .body(msg.to_string())
+                    .show();
+                let _ = app_handle.emit("alert-sound", ());
+            }
         }
         _ => {}
     }

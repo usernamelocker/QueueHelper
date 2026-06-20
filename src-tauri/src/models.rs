@@ -249,5 +249,7 @@ pub struct RuntimeSnapshot {
     pub auto_hover_enabled: bool,
     pub current_queue_id: Option<i64>,
     pub last_action: Option<String>,
+    pub monitor_auto_scroll: bool,
+    pub monitor_scroll_top: f64,
 }
 

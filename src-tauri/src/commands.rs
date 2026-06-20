@@ -3,6 +3,20 @@ use tauri::State;
 use anyhow::Result;
 use crate::{app::AppContext, core::events::AppEvent, models::{AppSettings, ProfilesStore, RulesStore, RuntimeSnapshot, MonitorEntry}};
 
+async fn update_settings_field(
+    context: &AppContext,
+    f: impl FnOnce(&mut AppSettings),
+) -> Result<RuntimeSnapshot, String> {
+    let (snapshot, settings) = {
+        let mut state = context.state.write().await;
+        f(&mut state.settings);
+        (state.snapshot(), state.settings.clone())
+    };
+    context.settings_store.save(&settings).await.map_err(|e| e.to_string())?;
+    context.bus.publish(AppEvent::SettingsUpdated(settings));
+    Ok(snapshot)
+}
+
 #[tauri::command]
 pub async fn get_runtime_snapshot(context: State<'_, Arc<AppContext>>) -> Result<RuntimeSnapshot, String> {
     let state = context.state.read().await;
@@ -51,62 +65,32 @@ pub async fn update_rules(context: State<'_, Arc<AppContext>>, rules: RulesStore
 #[tauri::command]
 pub async fn get_monitor_entries(context: State<'_, Arc<AppContext>>, limit: Option<u64>) -> Result<Vec<MonitorEntry>, String> {
     let limit = limit.unwrap_or(100) as usize;
-    context.monitor_db.list_recent(limit).map_err(|e| e.to_string())
+    context.monitor_db.list_recent(limit).await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn set_automation_paused(context: State<'_, Arc<AppContext>>, paused: bool) -> Result<RuntimeSnapshot, String> {
-    let (snapshot, settings) = {
-        let mut state = context.state.write().await;
-        state.settings.automation.paused = paused;
-        (state.snapshot(), state.settings.clone())
-    };
-    context.settings_store.save(&settings).await.map_err(|e| e.to_string())?;
-    Ok(snapshot)
+    update_settings_field(&context, |s| s.automation.paused = paused).await
 }
 
 #[tauri::command]
 pub async fn set_auto_accept_enabled(context: State<'_, Arc<AppContext>>, enabled: bool) -> Result<RuntimeSnapshot, String> {
-    let (snapshot, settings) = {
-        let mut state = context.state.write().await;
-        state.settings.automation.auto_accept.enabled = enabled;
-        (state.snapshot(), state.settings.clone())
-    };
-    context.settings_store.save(&settings).await.map_err(|e| e.to_string())?;
-    Ok(snapshot)
+    update_settings_field(&context, |s| s.automation.auto_accept.enabled = enabled).await
 }
 
 #[tauri::command]
 pub async fn set_auto_ban_enabled(context: State<'_, Arc<AppContext>>, enabled: bool) -> Result<RuntimeSnapshot, String> {
-    let (snapshot, settings) = {
-        let mut state = context.state.write().await;
-        state.settings.automation.auto_ban_enabled = enabled;
-        (state.snapshot(), state.settings.clone())
-    };
-    context.settings_store.save(&settings).await.map_err(|e| e.to_string())?;
-    Ok(snapshot)
+    update_settings_field(&context, |s| s.automation.auto_ban_enabled = enabled).await
 }
 
 #[tauri::command]
 pub async fn set_auto_pick_enabled(context: State<'_, Arc<AppContext>>, enabled: bool) -> Result<RuntimeSnapshot, String> {
-    let (snapshot, settings) = {
-        let mut state = context.state.write().await;
-        state.settings.automation.auto_pick_enabled = enabled;
-        (state.snapshot(), state.settings.clone())
-    };
-    context.settings_store.save(&settings).await.map_err(|e| e.to_string())?;
-    Ok(snapshot)
+    update_settings_field(&context, |s| s.automation.auto_pick_enabled = enabled).await
 }
 
 #[tauri::command]
 pub async fn set_auto_hover_enabled(context: State<'_, Arc<AppContext>>, enabled: bool) -> Result<RuntimeSnapshot, String> {
-    let (snapshot, settings) = {
-        let mut state = context.state.write().await;
-        state.settings.automation.auto_hover_enabled = enabled;
-        (state.snapshot(), state.settings.clone())
-    };
-    context.settings_store.save(&settings).await.map_err(|e| e.to_string())?;
-    Ok(snapshot)
+    update_settings_field(&context, |s| s.automation.auto_hover_enabled = enabled).await
 }
 
 #[tauri::command]
@@ -118,4 +102,27 @@ pub async fn set_active_profile(context: State<'_, Arc<AppContext>>, profile_id:
     };
     context.profiles_store.save(&profiles).await.map_err(|e| e.to_string())?;
     Ok(profile_id)
+}
+
+#[tauri::command]
+pub async fn set_monitor_auto_scroll(context: State<'_, Arc<AppContext>>, enabled: bool) -> Result<RuntimeSnapshot, String> {
+    let snapshot = {
+        let mut state = context.state.write().await;
+        state.monitor_auto_scroll = enabled;
+        state.snapshot()
+    };
+    Ok(snapshot)
+}
+
+#[tauri::command]
+pub async fn set_monitor_scroll_top(context: State<'_, Arc<AppContext>>, top: f64) -> Result<(), String> {
+    let mut state = context.state.write().await;
+    state.monitor_scroll_top = top;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn get_monitor_scroll_top(context: State<'_, Arc<AppContext>>) -> Result<f64, String> {
+    let state = context.state.read().await;
+    Ok(state.monitor_scroll_top)
 }

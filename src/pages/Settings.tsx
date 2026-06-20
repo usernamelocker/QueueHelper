@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { getSettings, updateSettings } from "../api/tauri";
+import { updateSettings } from "../api/tauri";
+import { useApp } from "../hooks/AppContext";
 import { useTranslation } from "../i18n";
 import type { AppSettings } from "../types/models";
 import NumberInput from "../components/NumberInput";
@@ -15,13 +16,18 @@ function getQueueOptions(t: (key: any) => string) {
 
 function Settings() {
   const { t, language, setLanguage } = useTranslation();
+  const app = useApp();
   const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [initialized, setInitialized] = useState(false);
   const [dirty, setDirty] = useState(false);
-  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    getSettings().then(setSettings).catch(console.error);
-  }, []);
+    if (app.settings && !initialized) {
+      setSettings(app.settings);
+      setInitialized(true);
+    }
+  }, [app.settings, initialized]);
+  const [saving, setSaving] = useState(false);
 
   const update = (patch: Partial<AppSettings>) => {
     if (!settings) return;

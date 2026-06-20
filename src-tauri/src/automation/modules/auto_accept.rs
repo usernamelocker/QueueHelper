@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use anyhow::Result;
 use rand::Rng;
+use tokio::sync::broadcast::error::RecvError;
 use tokio::time::sleep;
 
 use crate::{
@@ -18,8 +19,14 @@ pub async fn run_auto_accept(context: std::sync::Arc<AppContext>, shutdown: toki
         tokio::select! {
             _ = shutdown.cancelled() => break,
             event_result = receiver.recv() => {
-                let Ok(event) = event_result else {
-                    continue;
+                let event = match event_result {
+                    Ok(event) => event,
+                    Err(RecvError::Lagged(n)) => {
+                        context.monitor(MonitorLevel::Warn, "event-bus",
+                            format!("Dropped {} events (bus overflow)", n));
+                        continue;
+                    }
+                    Err(_) => break,
                 };
 
                 match event {
@@ -59,7 +66,7 @@ pub async fn run_auto_accept(context: std::sync::Arc<AppContext>, shutdown: toki
                             let mut rng = rand::rng();
                             let min_ms = (settings.delay_min_seconds * 1000.0) as u64;
                             let max_ms = (settings.delay_max_seconds * 1000.0) as u64;
-                            let delay_ms = rng.random_range(min_ms..=max_ms.max(min_ms + 100));
+                            let delay_ms = if max_ms <= min_ms { min_ms } else { rng.random_range(min_ms..=max_ms) };
                             Duration::from_millis(delay_ms)
                         };
 
@@ -69,10 +76,14 @@ pub async fn run_auto_accept(context: std::sync::Arc<AppContext>, shutdown: toki
                             format!("Match found – accepting in {:.2}s", delay.as_secs_f32()),
                         );
 
-                        sleep(delay).await;
+                        tokio::select! {
+                            _ = shutdown.cancelled() => break,
+                            _ = sleep(delay) => {}
+                        }
 
-                        if shutdown.is_cancelled() {
-                            break;
+                        if context.state.read().await.settings.automation.paused {
+                            has_accepted = false;
+                            continue;
                         }
 
                         match accept_queue(context.clone()).await {

@@ -52,7 +52,16 @@ impl MonitorDb {
 
     const MAX_ENTRIES: i64 = 1000;
 
-    pub fn append(&self, level: MonitorLevel, category: &str, message: &str) -> Result<()> {
+    pub async fn append(&self, level: MonitorLevel, category: &str, message: &str) -> Result<()> {
+        let db = self.clone();
+        let level = level.clone();
+        let category = category.to_string();
+        let message = message.to_string();
+        tokio::task::spawn_blocking(move || db.append_sync(level, &category, &message))
+            .await?
+    }
+
+    fn append_sync(&self, level: MonitorLevel, category: &str, message: &str) -> Result<()> {
         let timestamp = Utc::now().to_rfc3339();
         let conn = self
             .connection
@@ -64,7 +73,7 @@ impl MonitorDb {
             .unwrap_or(0);
         if count >= Self::MAX_ENTRIES {
             conn.execute(
-                "DELETE FROM monitor_entries WHERE id <= (SELECT id FROM monitor_entries ORDER BY id DESC LIMIT 1 OFFSET ?1)",
+                "DELETE FROM monitor_entries WHERE id NOT IN (SELECT id FROM monitor_entries ORDER BY id DESC LIMIT ?1)",
                 params![Self::MAX_ENTRIES],
             )
             .ok();
@@ -78,7 +87,12 @@ impl MonitorDb {
         Ok(())
     }
 
-    pub fn list_recent(&self, limit: usize) -> Result<Vec<MonitorEntry>> {
+    pub async fn list_recent(&self, limit: usize) -> Result<Vec<MonitorEntry>> {
+        let db = self.clone();
+        tokio::task::spawn_blocking(move || db.list_recent_sync(limit)).await?
+    }
+
+    fn list_recent_sync(&self, limit: usize) -> Result<Vec<MonitorEntry>> {
         let conn = self
             .connection
             .lock()

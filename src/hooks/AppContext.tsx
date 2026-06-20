@@ -4,6 +4,7 @@ import {
   getSettings,
   updateSettings,
   getProfiles,
+  getRules,
   getMonitorEntries,
   setAutomationPaused,
   setAutoAcceptEnabled,
@@ -16,6 +17,7 @@ import type {
   RuntimeSnapshot,
   AppSettings,
   ProfilesStore,
+  RulesStore,
   MonitorEntry,
 } from "../types/models";
 
@@ -23,6 +25,7 @@ interface AppState {
   snapshot: RuntimeSnapshot | null;
   settings: AppSettings | null;
   profiles: ProfilesStore | null;
+  rules: RulesStore | null;
   monitor: MonitorEntry[];
   error: string | null;
 }
@@ -44,19 +47,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     snapshot: null,
     settings: null,
     profiles: null,
+    rules: null,
     monitor: [],
     error: null,
   });
   useEffect(() => {
     const interval = setInterval(async () => {
       try {
-        const [snapshot, settings, profiles, monitor] = await Promise.all([
+        const [snapshot, settings, profiles, rules, monitor] = await Promise.all([
           getRuntimeSnapshot(),
           getSettings(),
           getProfiles(),
+          getRules(),
           getMonitorEntries(50),
         ]);
-        setState({ snapshot, settings, profiles, monitor, error: null });
+        setState({ snapshot, settings, profiles, rules, monitor, error: null });
       } catch {
         // not connected yet
       }

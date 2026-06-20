@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { getMonitorEntries } from "../api/tauri";
+import { getMonitorEntries, setMonitorAutoScroll, setMonitorScrollTop, getMonitorScrollTop } from "../api/tauri";
+import { useApp } from "../hooks/AppContext";
 import { useTranslation } from "../i18n";
 import type { MonitorEntry, MonitorLevel } from "../types/models";
 
@@ -13,10 +14,28 @@ const levelColors: Record<MonitorLevel, string> = {
 
 function Monitor() {
   const { t } = useTranslation();
+  const app = useApp();
   const [entries, setEntries] = useState<MonitorEntry[]>([]);
   const [filter, setFilter] = useState<MonitorLevel | "ALL">("ALL");
-  const [autoScroll, setAutoScroll] = useState(true);
+  const [autoScroll, setAutoScroll] = useState(app.snapshot?.monitorAutoScroll ?? true);
+  const containerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const restoredRef = useRef(false);
+  const firstEntryIdRef = useRef<number | null>(null);
+
+  const toggleAutoScroll = async () => {
+    const next = !autoScroll;
+    setAutoScroll(next);
+    try {
+      const snapshot = await setMonitorAutoScroll(next);
+      setAutoScroll(snapshot.monitorAutoScroll);
+      if (next && containerRef.current) {
+        containerRef.current.scrollTop = containerRef.current.scrollHeight;
+      }
+    } catch {
+      // ignore
+    }
+  };
 
   const fetchEntries = async () => {
     try {
@@ -33,10 +52,51 @@ function Monitor() {
     return () => clearInterval(interval);
   }, []);
 
+  // Save scroll position periodically (every 1s) + on page leave
   useEffect(() => {
+    const save = () => {
+      if (containerRef.current && !autoScroll) {
+        setMonitorScrollTop(containerRef.current.scrollTop).catch(() => {});
+      }
+    };
+    const interval = setInterval(save, 1000);
+    return () => {
+      clearInterval(interval);
+      save();
+    };
+  }, [autoScroll]);
+
+  // Restore saved scroll after first meaningful render
+  useEffect(() => {
+    if (entries.length === 0 || restoredRef.current) return;
+    const container = containerRef.current;
+    if (!container) return;
+
     if (autoScroll) {
-      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+      container.scrollTop = container.scrollHeight;
+      restoredRef.current = true;
+      return;
     }
+
+    getMonitorScrollTop().then((top) => {
+      if (containerRef.current) {
+        containerRef.current.scrollTop = top;
+      }
+      restoredRef.current = true;
+    }).catch(() => {
+      restoredRef.current = true;
+    });
+  }, [entries, autoScroll]);
+
+  // Auto-scroll: scroll to bottom when new entries arrive
+  useEffect(() => {
+    if (!autoScroll || entries.length === 0) return;
+    const newest = entries[entries.length - 1];
+    if (firstEntryIdRef.current !== null && newest.id === firstEntryIdRef.current) {
+      return;
+    }
+    firstEntryIdRef.current = newest.id;
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [entries, autoScroll]);
 
   const sorted = [...entries].reverse();
@@ -70,7 +130,7 @@ function Monitor() {
             </button>
           ))}
           <button
-            onClick={() => setAutoScroll(!autoScroll)}
+            onClick={toggleAutoScroll}
             className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
               autoScroll
                 ? "bg-accent/20 text-accent"
@@ -82,7 +142,10 @@ function Monitor() {
         </div>
       </div>
 
-      <div className="bg-surface-2 border border-border rounded-lg h-[60vh] overflow-y-auto font-mono text-xs">
+      <div
+        ref={containerRef}
+        className="bg-surface-2 border border-border rounded-lg h-[60vh] overflow-y-auto font-mono text-xs"
+      >
         {filtered.length === 0 ? (
           <p className="p-4 text-text-dim">{t("monitor.noEntries")}</p>
         ) : (

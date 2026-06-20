@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { getRules, updateRules, getProfiles } from "../api/tauri";
+import { updateRules } from "../api/tauri";
+import { useApp } from "../hooks/AppContext";
 import { useTranslation } from "../i18n";
 import type { RulesStore, DraftRule, ProfilesStore } from "../types/models";
 import { useChampions } from "../hooks/useChampions";
@@ -8,14 +9,10 @@ const ROLES = ["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"];
 
 function DraftRules() {
   const { t } = useTranslation();
-  const [store, setStore] = useState<RulesStore | null>(null);
-  const [profilesStore, setProfilesStore] = useState<ProfilesStore | null>(null);
+  const app = useApp();
+  const [store, setStore] = useState<RulesStore | null>(app.rules);
+  const [profilesStore] = useState<ProfilesStore | null>(app.profiles);
   const { champions } = useChampions();
-
-  useEffect(() => {
-    getRules().then(setStore).catch(console.error);
-    getProfiles().then(setProfilesStore).catch(console.error);
-  }, []);
 
   const toggleRule = async (ruleId: string) => {
     if (!store) return;

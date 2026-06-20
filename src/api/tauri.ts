@@ -62,3 +62,15 @@ export async function setAutoHoverEnabled(enabled: boolean): Promise<RuntimeSnap
 export async function setActiveProfile(profileId: string): Promise<string> {
   return invoke("set_active_profile", { profileId });
 }
+
+export async function setMonitorAutoScroll(enabled: boolean): Promise<RuntimeSnapshot> {
+  return invoke("set_monitor_auto_scroll", { enabled });
+}
+
+export async function setMonitorScrollTop(top: number): Promise<void> {
+  return invoke("set_monitor_scroll_top", { top });
+}
+
+export async function getMonitorScrollTop(): Promise<number> {
+  return invoke("get_monitor_scroll_top");
+}

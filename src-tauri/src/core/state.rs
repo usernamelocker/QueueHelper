@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use tokio::sync::broadcast::error::RecvError;
 use tokio_util::sync::CancellationToken;
 
 use crate::{
@@ -21,6 +22,8 @@ pub struct RuntimeState {
     pub rules: RulesStore,
     pub last_action: Option<String>,
     pub current_queue_id: Option<i64>,
+    pub monitor_auto_scroll: bool,
+    pub monitor_scroll_top: f64,
 }
 
 impl RuntimeState {
@@ -36,6 +39,8 @@ impl RuntimeState {
             rules,
             last_action: None,
             current_queue_id: None,
+            monitor_auto_scroll: true,
+            monitor_scroll_top: 0.0,
         }
     }
 
@@ -63,6 +68,8 @@ impl RuntimeState {
             auto_hover_enabled: self.settings.automation.auto_hover_enabled,
             last_action: self.last_action.clone(),
             current_queue_id: self.current_queue_id,
+            monitor_auto_scroll: self.monitor_auto_scroll,
+            monitor_scroll_top: self.monitor_scroll_top,
         }
     }
 }
@@ -74,8 +81,16 @@ pub async fn run_state_reducer(context: Arc<AppContext>, shutdown: CancellationT
         tokio::select! {
             _ = shutdown.cancelled() => break,
             event_result = receiver.recv() => {
-                let Ok(event) = event_result else {
-                    continue;
+                let event = match event_result {
+                    Ok(event) => event,
+                    Err(RecvError::Lagged(n)) => {
+                        let _ = context.monitor_db.append(
+                            crate::models::MonitorLevel::Warn, "event-bus",
+                            &format!("Dropped {} events (bus overflow)", n),
+                        ).await;
+                        continue;
+                    }
+                    Err(_) => break,
                 };
                 apply_event(&context, event).await;
             }
@@ -128,7 +143,7 @@ async fn apply_event(context: &Arc<AppContext>, event: AppEvent) {
             category,
             message,
         } => {
-            let _ = context.monitor_db.append(level, &category, &message);
+            let _ = context.monitor_db.append(level, &category, &message).await;
             let mut state = context.state.write().await;
             state.last_action = Some(message);
         }

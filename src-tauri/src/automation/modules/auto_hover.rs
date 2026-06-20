@@ -1,13 +1,12 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::Result;
 use rand::Rng;
-use serde_json::json;
+use tokio::sync::broadcast::error::RecvError;
 use tokio::time::sleep;
 use tokio_util::sync::CancellationToken;
 
-use crate::{app::AppContext, core::events::AppEvent, models::MonitorLevel};
+use crate::{app::AppContext, automation::modules::shared::perform_hover, core::events::AppEvent, models::MonitorLevel};
 
 pub async fn run_auto_hover(context: Arc<AppContext>, shutdown: CancellationToken) {
     let mut receiver = context.bus.subscribe();
@@ -17,7 +16,15 @@ pub async fn run_auto_hover(context: Arc<AppContext>, shutdown: CancellationToke
         tokio::select! {
             _ = shutdown.cancelled() => break,
             event_result = receiver.recv() => {
-                let Ok(event) = event_result else { continue };
+                let event = match event_result {
+                    Ok(event) => event,
+                    Err(RecvError::Lagged(n)) => {
+                        context.monitor(MonitorLevel::Warn, "event-bus",
+                            format!("Dropped {} events (bus overflow)", n));
+                        continue;
+                    }
+                    Err(_) => break,
+                };
 
                 match event {
                     AppEvent::ChampSelectSessionUpdated { session } => {
@@ -69,10 +76,11 @@ pub async fn run_auto_hover(context: Arc<AppContext>, shutdown: CancellationToke
                                 let jitter = rng.random_range(0..=half);
                                 (delay_seconds * 1000.0) as u64 - half + jitter
                             };
-                            sleep(Duration::from_millis(delay_ms)).await;
+                            tokio::select! {
+                                _ = shutdown.cancelled() => break,
+                                _ = sleep(Duration::from_millis(delay_ms)) => {}
+                            }
                         }
-
-                        if shutdown.is_cancelled() { break }
 
                         let mut all_ok = true;
                         for action in &local_actions {
@@ -99,18 +107,4 @@ pub async fn run_auto_hover(context: Arc<AppContext>, shutdown: CancellationToke
     }
 }
 
-async fn perform_hover(context: &Arc<AppContext>, action_id: i64, champion_id: i64) -> Result<()> {
-    let client = context.lcu_client.read().await.clone();
-    let Some(client) = client else {
-        return Err(anyhow::anyhow!("LCU client not connected"));
-    };
 
-    client
-        .patch_json(
-            &format!("/lol-champ-select/v1/session/actions/{}", action_id),
-            json!({ "championId": champion_id }),
-        )
-        .await?;
-
-    Ok(())
-}
