@@ -206,22 +206,10 @@ async fn try_process_session(
 
     pending_hover.insert(action.id);
 
-    if delay_seconds > 0.0 {
-        let delay_ms = {
-            let half = (delay_seconds * 500.0) as u64;
-            let mut rng = rand::rng();
-            let jitter = rng.random_range(0..=half);
-            (delay_seconds * 1000.0) as u64 - half + jitter
-        };
-        tokio::select! {
-            _ = shutdown.cancelled() => { pending_hover.remove(&action.id); return Ok(()); }
-            _ = sleep(Duration::from_millis(delay_ms)) => {}
-        }
-    } else {
-        tokio::select! {
-            _ = shutdown.cancelled() => { pending_hover.remove(&action.id); return Ok(()); }
-            _ = sleep(Duration::from_millis(50)) => {}
-        }
+    // brief yield so rules_engine can switch profile
+    tokio::select! {
+        _ = shutdown.cancelled() => { pending_hover.remove(&action.id); return Ok(()); }
+        _ = sleep(Duration::from_millis(50)) => {}
     }
 
     if context.state.read().await.settings.automation.paused {
@@ -267,6 +255,25 @@ async fn try_process_session(
     };
 
     let _ = perform_hover(context, action.id, champion_id).await;
+
+    // user-configured delay after hover so champion is visible
+    if delay_seconds > 0.0 {
+        let delay_ms = {
+            let half = (delay_seconds * 500.0) as u64;
+            let mut rng = rand::rng();
+            let jitter = rng.random_range(0..=half);
+            (delay_seconds * 1000.0) as u64 - half + jitter
+        };
+        tokio::select! {
+            _ = shutdown.cancelled() => { pending_hover.remove(&action.id); return Ok(()); }
+            _ = sleep(Duration::from_millis(delay_ms)) => {}
+        }
+    }
+
+    if context.state.read().await.settings.automation.paused {
+        pending_hover.remove(&action.id);
+        return Ok(());
+    }
 
     match perform_pick(context, action.id, champion_id).await {
         Ok(_) => {
