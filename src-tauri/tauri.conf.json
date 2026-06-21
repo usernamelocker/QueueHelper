@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Queue Helper",
-  "version": "0.1.2-beta",
+  "version": "0.1.2-beta.1",
   "identifier": "com.admin.queue-helper",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -37,7 +37,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDUzODdFNDBGQTE4NjBCMjIKUldRaUM0YWhEK1NIVThUMWEyMjFxSVQ5WDFvd09KVkZWenpXVVRoODhoWE1hbFlCLzhmMGU2ZEUK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDg3MTlFMzRCOEIyODc3REQKUldUZGR5aUxTK01aaHk1ZHFCK0lCVERONkEyU2tFUVl3Q05yOVhubkRmay90Vm5GeXNRdkxpUlEK",
       "endpoints": [
         "https://raw.githubusercontent.com/usernamelocker/QueueHelper/master/update.json"
       ]

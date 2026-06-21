@@ -1,11 +1,11 @@
 {
-  "version": "0.1.2-beta",
-  "notes": "Bug fixes: double-pick, bot detection, in-flight pause abort, monitor scroll persistence, alert sound notifications",
-  "pub_date": "2026-06-21T23:00:00Z",
+  "version": "0.1.2-beta.1",
+  "notes": "Fix: auto-ban and auto-pick now read profile after delay (same as auto-hover fix), ban hover restored",
+  "pub_date": "2026-06-22T10:00:00Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRaUM0YWhEK1NIVXc1Q2xRWkEyTkF6MXJGOWV6MmpiTmZoRDREZkhvQnZ6S1FjYkNJUXp2OGRvOXdwM2RybFl0dGRDOHBZcDl1Sjc3R1JLNWRWZkFkKzU3a1lYYm1mNVFJPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyMDAxNDY3CWZpbGU6UXVldWUgSGVscGVyXzAuMS4yLWJldGFfeDY0LXNldHVwLmV4ZQpQd2x1ZXYxMXo5TUFNR2M3cmhxakozREs4K2J1ZS9iY2puMW82VU9vSVBUdmQvUjJuRkVDVzRsci8xdHg1L3ZSZ1FOVzNvTU5UcW45bzBFMnhnYjhCZz09Cg==",
-      "url": "https://github.com/usernamelocker/QueueHelper/releases/download/v0.1.2-beta/Queue_Helper_0.1.2-beta_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUZGR5aUxTK01aaDM4cjNsNHB3R3JUclFPUkxCbHdnVGhEMUdpYlF2c1pmRWkwWE5WRG9FZTM3dnlXS3owM3dFbWZOWDB3T2JpYkxmUTBtcjgyNE03ZUdQanRtZXNIbEFRPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyMDc3ODYyCWZpbGU6UXVldWUgSGVscGVyXzAuMS4yLWJldGEuMV94NjQtc2V0dXAuZXhlCnpjS1hyT1BEMTFtanVzZU9KNEVhSG5NRldMUWY4c3hxMXBKRVZ4OEFsOTRpaUQ0a1Y5NzZqREgwazRkYnhiWnZNb1g5YVVlL0pRa01FRVRGdkF2dUJRPT0K",
+      "url": "https://github.com/usernamelocker/QueueHelper/releases/download/v0.1.2-beta/Queue_Helper_0.1.2-beta.1_x64-setup.exe"
     }
   }
 }
