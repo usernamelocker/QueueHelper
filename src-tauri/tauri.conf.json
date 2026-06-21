@@ -34,5 +34,13 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDUzODdFNDBGQTE4NjBCMjIKUldRaUM0YWhEK1NIVThUMWEyMjFxSVQ5WDFvd09KVkZWenpXVVRoODhoWE1hbFlCLzhmMGU2ZEUK",
+      "endpoints": [
+        "https://raw.githubusercontent.com/usernamelocker/QueueHelper/master/update.json"
+      ]
+    }
   }
 }

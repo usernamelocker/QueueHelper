@@ -1,7 +1,8 @@
 use std::sync::Arc;
-use tauri::image::Image;
+use tauri::{image::Image, Emitter};
 use tauri::menu::{MenuBuilder, MenuItemBuilder};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri_plugin_updater::UpdaterExt;
 
 fn create_tray_icon() -> Image<'static> {
     let bytes = include_bytes!("../icons/32x32.png");
@@ -23,6 +24,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_updater::Builder::default().build())
         .invoke_handler(tauri::generate_handler![
             commands::get_runtime_snapshot,
             commands::get_settings,
@@ -130,6 +132,29 @@ pub fn run() {
                     }
                 })
                 .build(app)?;
+
+            // ── Check for updates ──
+            let updater_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                // Wait a few seconds so the app can start up first
+                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                loop {
+                    if let Ok(updater) = updater_handle.updater() {
+                        if let Ok(Some(update)) = updater.check().await {
+                            let _ = updater_handle.emit("update-available", serde_json::json!({
+                                "version": update.version,
+                                "date": update.date,
+                                "body": update.body,
+                            }));
+                            if let Err(e) = update.download_and_install(|_, _| {}, || {}).await {
+                                eprintln!("[updater] download/install failed: {}", e);
+                            }
+                        }
+                    }
+                    // Check again in 6 hours
+                    tokio::time::sleep(std::time::Duration::from_secs(6 * 60 * 60)).await;
+                }
+            });
 
             // ── Minimize to tray on close ──
             if let Some(window) = app.get_webview_window("main") {

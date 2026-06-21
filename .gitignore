@@ -28,3 +28,7 @@ src-tauri/target/
 
 # Built installer
 QueueHelper_Setup.exe
+
+# Updater signing key (DO NOT COMMIT)
+updater.key
+updater.key.pub

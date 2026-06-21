@@ -1,0 +1,11 @@
+{
+  "version": "0.1.2-beta",
+  "notes": "Bug fixes: double-pick, bot detection, in-flight pause abort, monitor scroll persistence, alert sound notifications",
+  "pub_date": "2026-06-21T23:00:00Z",
+  "platforms": {
+    "windows-x86_64": {
+      "signature": "",
+      "url": "https://github.com/usernamelocker/QueueHelper/releases/download/v0.1.2-beta/Queue_Helper_0.1.2-beta_x64-setup.exe"
+    }
+  }
+}
