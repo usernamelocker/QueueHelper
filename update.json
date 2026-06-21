@@ -4,7 +4,7 @@
   "pub_date": "2026-06-21T23:00:00Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRaUM0YWhEK1NIVXc1Q2xRWkEyTkF6MXJGOWV6MmpiTmZoRDREZkhvQnZ6S1FjYkNJUXp2OGRvOXdwM2RybFl0dGRDOHBZcDl1Sjc3R1JLNWRWZkFkKzU3a1lYYm1mNVFJPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyMDAxNDY3CWZpbGU6UXVldWUgSGVscGVyXzAuMS4yLWJldGFfeDY0LXNldHVwLmV4ZQpQd2x1ZXYxMXo5TUFNR2M3cmhxakozREs4K2J1ZS9iY2puMW82VU9vSVBUdmQvUjJuRkVDVzRsci8xdHg1L3ZSZ1FOVzNvTU5UcW45bzBFMnhnYjhCZz09Cg==",
       "url": "https://github.com/usernamelocker/QueueHelper/releases/download/v0.1.2-beta/Queue_Helper_0.1.2-beta_x64-setup.exe"
     }
   }
