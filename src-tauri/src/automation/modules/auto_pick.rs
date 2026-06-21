@@ -166,14 +166,10 @@ async fn try_process_session(
     };
     if !is_enabled { return Ok(()) }
 
-    let (profile, delay_seconds) = {
+    let delay_seconds = {
         let state = context.state.read().await;
-        let id = state.profiles.active_profile_id.clone();
-        let profile = id.and_then(|pid| state.profiles.profiles.iter().find(|p| p.id == pid).cloned());
-        let delay = state.settings.automation.auto_pick_delay_seconds;
-        (profile, delay)
+        state.settings.automation.auto_pick_delay_seconds
     };
-    let Some(profile) = profile else { return Ok(()) };
 
     let Some(action) = session
         .actions
@@ -208,6 +204,41 @@ async fn try_process_session(
         .filter(|cid| *cid != 0)
         .collect();
 
+    pending_hover.insert(action.id);
+
+    if delay_seconds > 0.0 {
+        let delay_ms = {
+            let half = (delay_seconds * 500.0) as u64;
+            let mut rng = rand::rng();
+            let jitter = rng.random_range(0..=half);
+            (delay_seconds * 1000.0) as u64 - half + jitter
+        };
+        tokio::select! {
+            _ = shutdown.cancelled() => { pending_hover.remove(&action.id); return Ok(()); }
+            _ = sleep(Duration::from_millis(delay_ms)) => {}
+        }
+    } else {
+        tokio::select! {
+            _ = shutdown.cancelled() => { pending_hover.remove(&action.id); return Ok(()); }
+            _ = sleep(Duration::from_millis(50)) => {}
+        }
+    }
+
+    if context.state.read().await.settings.automation.paused {
+        pending_hover.remove(&action.id);
+        return Ok(());
+    }
+
+    let profile = {
+        let state = context.state.read().await;
+        let id = state.profiles.active_profile_id.clone();
+        id.and_then(|pid| state.profiles.profiles.iter().find(|p| p.id == pid).cloned())
+    };
+    let Some(profile) = profile else {
+        pending_hover.remove(&action.id);
+        return Ok(());
+    };
+
     let skip = failed_attempts.get(&action.id);
 
     let champion_id = profile
@@ -230,36 +261,12 @@ async fn try_process_session(
         .map(|entry| entry.champion_id);
 
     let Some(champion_id) = champion_id else {
+        pending_hover.remove(&action.id);
         context.monitor(MonitorLevel::Warn, "auto-pick", "No available champion to pick".to_string());
         return Ok(());
     };
 
-    pending_hover.insert(action.id);
-
     let _ = perform_hover(context, action.id, champion_id).await;
-
-    if delay_seconds > 0.0 {
-        let delay_ms = {
-            let half = (delay_seconds * 500.0) as u64;
-            let mut rng = rand::rng();
-            let jitter = rng.random_range(0..=half);
-            (delay_seconds * 1000.0) as u64 - half + jitter
-        };
-        tokio::select! {
-            _ = shutdown.cancelled() => { return Ok(()); }
-            _ = sleep(Duration::from_millis(delay_ms)) => {}
-        }
-    } else {
-        tokio::select! {
-            _ = shutdown.cancelled() => { return Ok(()); }
-            _ = sleep(Duration::from_millis(50)) => {}
-        }
-    }
-
-    if context.state.read().await.settings.automation.paused {
-        pending_hover.remove(&action.id);
-        return Ok(());
-    }
 
     match perform_pick(context, action.id, champion_id).await {
         Ok(_) => {

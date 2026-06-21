@@ -122,14 +122,10 @@ pub async fn run_auto_ban(context: Arc<AppContext>, shutdown: tokio_util::sync::
                         };
                         if !is_enabled { continue }
 
-                        let (profile, delay_seconds) = {
+                        let delay_seconds = {
                             let state = context.state.read().await;
-                            let id = state.profiles.active_profile_id.clone();
-                            let profile = id.and_then(|pid| state.profiles.profiles.iter().find(|p| p.id == pid).cloned());
-                            let delay = state.settings.automation.auto_ban_delay_seconds;
-                            (profile, delay)
+                            state.settings.automation.auto_ban_delay_seconds
                         };
-                        let Some(profile) = profile else { continue };
 
                         let Some(action) = session
                             .actions
@@ -167,6 +163,41 @@ pub async fn run_auto_ban(context: Arc<AppContext>, shutdown: tokio_util::sync::
                             .chain(team_hovered)
                             .collect();
 
+                        pending_hover.insert(action.id);
+
+                        if delay_seconds > 0.0 {
+                            let delay_ms = {
+                                let half = (delay_seconds * 500.0) as u64;
+                                let mut rng = rand::rng();
+                                let jitter = rng.random_range(0..=half);
+                                (delay_seconds * 1000.0) as u64 - half + jitter
+                            };
+                            tokio::select! {
+                                _ = shutdown.cancelled() => break,
+                                _ = sleep(Duration::from_millis(delay_ms)) => {}
+                            }
+                        } else {
+                            tokio::select! {
+                                _ = shutdown.cancelled() => break,
+                                _ = sleep(Duration::from_millis(50)) => {}
+                            }
+                        }
+
+                        if context.state.read().await.settings.automation.paused {
+                            pending_hover.remove(&action.id);
+                            continue;
+                        }
+
+                        let profile = {
+                            let state = context.state.read().await;
+                            let id = state.profiles.active_profile_id.clone();
+                            id.and_then(|pid| state.profiles.profiles.iter().find(|p| p.id == pid).cloned())
+                        };
+                        let Some(profile) = profile else {
+                            pending_hover.remove(&action.id);
+                            continue;
+                        };
+
                         let skip = failed_attempts.get(&action.id);
 
                         let champion_id = profile
@@ -203,31 +234,13 @@ pub async fn run_auto_ban(context: Arc<AppContext>, shutdown: tokio_util::sync::
                             });
 
                         let Some(champion_id) = champion_id else {
+                            pending_hover.remove(&action.id);
                             context.monitor(MonitorLevel::Warn, "auto-ban", "No available champion to ban".to_string());
                             continue;
                         };
 
-                        pending_hover.insert(action.id);
-
-                        if delay_seconds > 0.0 {
-                            let _ = perform_hover(&context, action.id, champion_id).await;
-                            context.monitor(MonitorLevel::Info, "auto-ban", format!("Hovered champion #{} for ban", champion_id));
-                            let delay_ms = {
-                                let half = (delay_seconds * 500.0) as u64;
-                                let mut rng = rand::rng();
-                                let jitter = rng.random_range(0..=half);
-                                (delay_seconds * 1000.0) as u64 - half + jitter
-                            };
-                            tokio::select! {
-                                _ = shutdown.cancelled() => break,
-                                _ = sleep(Duration::from_millis(delay_ms)) => {}
-                            }
-                        }
-
-                        if context.state.read().await.settings.automation.paused {
-                            pending_hover.remove(&action.id);
-                            continue;
-                        }
+                        let _ = perform_hover(&context, action.id, champion_id).await;
+                        context.monitor(MonitorLevel::Info, "auto-ban", format!("Hovered champion #{} for ban", champion_id));
 
                         match perform_ban(&context, action.id, champion_id).await {
                             Ok(_) => {
