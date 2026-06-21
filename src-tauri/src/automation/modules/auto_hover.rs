@@ -48,18 +48,10 @@ pub async fn run_auto_hover(context: Arc<AppContext>, shutdown: CancellationToke
                             continue;
                         }
 
-                        let (target_champion_id, delay_seconds) = {
+                        let delay_seconds = {
                             let state = context.state.read().await;
-                            let id = state.profiles.active_profile_id.clone();
-                            let cid = id.and_then(|pid| {
-                                state.profiles.profiles.iter()
-                                    .find(|p| p.id == pid)
-                                    .and_then(|p| p.pick_priority.iter().find(|e| e.is_hover_target).map(|e| e.champion_id))
-                            });
-                            (cid, state.settings.automation.auto_hover_delay_seconds)
+                            state.settings.automation.auto_hover_delay_seconds
                         };
-
-                        let Some(champion_id) = target_champion_id else { continue };
 
                         let local_actions: Vec<_> = session.actions.iter()
                             .flatten()
@@ -68,7 +60,7 @@ pub async fn run_auto_hover(context: Arc<AppContext>, shutdown: CancellationToke
 
                         if local_actions.is_empty() { continue; }
 
-                        // delay before first hover
+                        // delay before first hover (also gives rules_engine time to switch profile)
                         if delay_seconds > 0.0 {
                             let delay_ms = {
                                 let half = (delay_seconds * 500.0) as u64;
@@ -80,7 +72,25 @@ pub async fn run_auto_hover(context: Arc<AppContext>, shutdown: CancellationToke
                                 _ = shutdown.cancelled() => break,
                                 _ = sleep(Duration::from_millis(delay_ms)) => {}
                             }
+                        } else {
+                            tokio::select! {
+                                _ = shutdown.cancelled() => break,
+                                _ = sleep(Duration::from_millis(50)) => {}
+                            }
                         }
+
+                        // read profile AFTER delay so rules_engine's auto-switch has taken effect
+                        let target_champion_id = {
+                            let state = context.state.read().await;
+                            let id = state.profiles.active_profile_id.clone();
+                            id.and_then(|pid| {
+                                state.profiles.profiles.iter()
+                                    .find(|p| p.id == pid)
+                                    .and_then(|p| p.pick_priority.iter().find(|e| e.is_hover_target).map(|e| e.champion_id))
+                            })
+                        };
+
+                        let Some(champion_id) = target_champion_id else { continue };
 
                         let mut all_ok = true;
                         for action in &local_actions {
